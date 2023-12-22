@@ -1,0 +1,35 @@
+# general
+#########
+.DS_Store
+*.orig
+*.tmp
+npm-debug.log
+Thumbs.db
+node_modules/
+coverage/
+npm-debug.log
+.idea/
+
+
+
+# editors
+#########
+
+/nbproject/
+/.settings/
+/.project
+/.pydevproject
+/.classpath
+/.buildpath
+.idea/
+*.tern-project
+*.api
+*.api.properties
+.vscode/
+/certs
+*.code-workspace
+
+# vim
+*~
+*.swp
+*.swo
