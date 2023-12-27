@@ -1,12 +1,45 @@
 {
+    "root": true,
     "env": {
         "browser": true,
         "es2021": true
     },
-    "extends": "airbnb-base",
+    "extends": "airbnb-base/legacy",
     "parserOptions": {
         "ecmaVersion": "latest"
     },
+    "globals": {
+        "jQuery": true,
+        "$": true
+    },
     "rules": {
+        "import/no-unresolved": "off",
+        "indent": ["off", 4, {
+            "SwitchCase": 1,
+            "VariableDeclarator": 1
+        }],
+        "func-names": "off",
+        "one-var": "off",
+        "radix": "off",
+        "no-useless-computed-key": "error",
+        "no-prototype-builtins": "off",
+        "no-useless-constructor": "error",
+        "no-useless-rename": "error",
+        "no-multi-assign": "off",
+        "accessor-pairs": "error",
+        "rest-spread-spacing": "error",
+        "no-tabs": "error",
+        "selector-pseudo-element-colon-notation": "off",
+        "func-call-spacing": "error",
+        "vars-on-top": "off",
+        "global-require": "off",
+        "no-shadow": ["error", {
+            "allow": ["err", "callback"]
+        }],
+        "max-len": "off",
+        "no-continue": "off",
+        "no-undef": "error",
+        "no-console": "off",
+        "eol-last": "off"
     }
 }
