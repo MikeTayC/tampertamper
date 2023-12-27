@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Better Binger - powered by jwplayer (aniwave)
+// @name         Better Binger - Main
 // @namespace    http://tampermonkey.net/
 // @version      2023-12-09
 // @description  try to take over the world!
@@ -8,86 +8,37 @@
 // @match        *://*.aniwave.bz/*
 // @match        *://*.aniwave.ws/*
 // @match        *://*.aniwave.vc/*
-// @match        *://*.vidplay.online/*
-// @require      http://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js
-
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=aniwave.to
 // @run-at       document-idle
 // @grant        unsafeWindow
 // ==/UserScript==
-/* global jQuery, $ */
-this.$ = this.jQuery = jQuery.noConflict(true);
 
-function waitForInitialAutoStart(selector, options) {
-    return new Promise(resolve => {
-        var selectorElement = document.querySelector(selector);
-        const observer = new MutationObserver(mutations => {
-            for (const mutation of mutations) {
-                if (mutation.type === "attributes") {
-                    if (mutation.oldValue === 'opacity: 1;') {
-                        observer.disconnect();
-                        resolve(selectorElement);
-                    }
-                }
-            }
-        });
-        observer.observe(selectorElement, options || {
-            childList: true,
-            subtree: true
-        });
-    });
+'use strict';
+
+const playerSelect = '#player';
+const jwplayerSelect = '.jw-player';
+const playButtonSelect = '.play';
+const backSelect = 'div.ctrl.forward.prev';
+const nextSelect = 'div.ctrl.forward.next';
+
+const BETTER_BINGER = 'BETTER_BINGER';
+
+
+function l(e) {
+    console.error(e);
 }
-
-function waitForElm(selector, options) {
-    return new Promise(resolve => {
-
-        var selectorElement = document.querySelector(selector);
-        // if (selectorElement) {
-        //     l('did not use mutant')
-        //     return resolve(selectorElement);
-        // }
-
-        const observer = new MutationObserver(mutations => {
-            for (const mutation of mutations) {
-                if (mutation.type === "attributes") {
-
-                    l('attr name')
-                    l(mutation.attributeName)
-                    l('attr old value')
-                    l(mutation.oldValue)
-                }
-            }
-
-            if (selectorElement) {
-                l('mutant found')
-                // observer.disconnect();
-                resolve(selectorElement);
-            }
-        });
-
-        l('mutant observe begin')
-        observer.observe(selectorElement, options || {
-            childList: true,
-            subtree: true
-        });
-    });
-}
-
 
 function waitForElementByMutant(selector, mutantType, mutantValue, options) {
     return new Promise(resolve => {
         var selectorElement = document.querySelector(selector);
         if (selectorElement) {
             const observer = new MutationObserver(mutations => {
-                for (const mutation of mutations) {
-                    if (mutation.type === mutantType) {
-                        if (mutation.oldValue.indexOf(mutantValue) > -1) {
-                            observer.disconnect();
-                            resolve(selectorElement);
-                        }
-                    }
+                if (mutations.some((mutation) => (mutation.type === mutantType) && mutation.oldValue.indexOf(mutantValue))) {
+                    observer.disconnect();
+                    resolve(selectorElement);
                 }
             });
+
             observer.observe(selectorElement, options || {
                 childList: true,
                 subtree: true
@@ -96,28 +47,21 @@ function waitForElementByMutant(selector, mutantType, mutantValue, options) {
     });
 }
 
-
-function waitForPlayer(selector, mutantType, mutantValue, options) {
+function waitForPlayer(player, mutantType, mutantValue, options) {
     return new Promise(resolve => {
-        var selectorElement = document.querySelector(selector);
-        if (selectorElement) {
+        if (player) {
             const observer = new MutationObserver(mutations => {
-                for (const mutation of mutations) {
-                    if (mutation.type === mutantType) {
-                        if (mutation.addedNodes && mutation.addedNodes.length) {
-                            var nodeElement = mutation.addedNodes.item(0);
-                            if (nodeElement.tagName === 'IFRAME') {
-                                observer.disconnect();
-                                resolve(nodeElement);
+                var mutantRecord = mutations.find((mutation) => {
+                    return (mutation.type === mutantType) && (mutation.addedNodes && mutation.addedNodes.length) && (mutation.addedNodes.item(0).tagName === 'IFRAME');
+                });
 
-
-                            }
-                        }
-                    }
+                if (mutantRecord) {
+                    observer.disconnect();
+                    resolve(mutantRecord.addedNodes.item(0));
                 }
             });
 
-            observer.observe(selectorElement, options || {
+            observer.observe(player, options || {
                 childList: true,
                 subtree: true
             });
@@ -125,115 +69,145 @@ function waitForPlayer(selector, mutantType, mutantValue, options) {
     });
 }
 
-function waitForJWPlayer(iframeElement, mutantType, mutantValue, options) {
-    return new Promise(resolve => {
-        const observer = new MutationObserver(mutations => {
-            for (const mutation of mutations) {
-                l(mutation)
-                if (mutation.type === mutantType) {
-                    if (mutation.addedNodes && mutation.addedNodes.length) {
-                        l(mutation.addedNodes);
-                        var nodeElement = mutation.addedNodes.item(0);
-                        //  observer.disconnect();
-                        // resolve(nodeElement);
-                    }
-                }
-            }
-        });
 
-        l('observe iframe')
-        l(iframeElement)
-        observer.observe(iframeElement, options || {
-            childList: true,
-            subtree: true
-        });
-    });
+function clicker(el, options) {
+    if (el) {
+        var event = new MouseEvent('click', options || {});
+        l(el.dispatchEvent(event));
+    } else {
+        l('no el to click')
+    }
 }
 
+function requestFullScreen() {
+    var jwplayer = document.querySelector(playerSelect);
+    if (jwplayer) {
+        jwplayer.requestFullscreen().catch((e) => {
+            l('In error promise idk');
+            l(e);
+            l('doc fullscreenelement3');
+            l(document.fullscreenElement);
 
-function l(s) {
-    console.error(s);
+            setTimeout(() => {
+                l('trying jwplayer.click');
+                clicker(jwplayer);
+
+                var promised2 = jwplayer.requestFullscreen();
+                promised2.then((idk2) => {
+                    l('in promise22 idk');
+                    l(idk2);
+                    l('doc fullscreenelement4');
+                    l(document.fullscreenElement);
+                }).catch((e) => {
+                    l('In error promise22 idk');
+                    l(e);
+                });
+            }, 3000);
+        });
+    }
+}
+
+function recordKeyPress(ev) {
+    try {
+        if (ev && ev.target && ev.target.tagName !== 'INPUT') {
+            switch (ev.key) {
+                case 'f':
+                    if (ev.target.id !== 'player') {
+                        if (!document.fullscreenElement) {
+                            requestFullScreen();
+                        } else {
+                            document.exitFullscreen();
+                        }
+                    }
+                    break;
+                default:
+                    // do nothing
+                    break;
+            }
+        }
+    } catch (e) {
+        l(e);
+    }
+}
+
+function playerHotKeyOverwrite(ev) {
+    try {
+        // if (ev && ev.target && ev.target.tagName !== 'INPUT') {
+        if (ev) {
+            l(ev.key);
+            l(ev);
+            l(ev.target)
+            l(ev.target.id)
+
+            // switch (ev.key) {
+            //     case 'b':
+            //         if (ev.target.id === 'player') {
+            //             l('clicked b in player');
+
+            //             clicker(document.querySelector(backSelect));
+            //         }
+            //         break;
+            //     case 'n':
+            //         if (ev.target.id === 'player') {
+            //             l('clicked n in player')
+            //             clicker(document.querySelector(nextSelect));
+            //         }
+            //         break;
+            //     default:
+            //         // do nothing
+            //         break;
+            // }
+        } else {
+            l('no ev for hotkey overwrite')
+        }
+    } catch (e) {
+        l(e);
+    }
 }
 
 (function () {
-
-
-    'use strict';
-
-    var doc = document;
-
-    const playerSelect = '#player';
-    const jwplayerSelect = '.jw-player';
-    const playButtonSelect = '.play';
-
-    l('testering')
-
+    l('testering');
     try {
+        window.addEventListener('keydown', recordKeyPress);
+
+        window.addEventListener('message', (event) => {
+
+            if (event?.data?.id === BETTER_BINGER) {
+                l('message event listened');
+                l(event);
+                l(event.data);
+            }
+        }, false);
+
         waitForElementByMutant(playButtonSelect, 'attributes', 'opacity: 1;', {
             attributes: true,
             attributeFilter: ['style'],
             attributeOldValue: true
         }).then((elm) => {
-            $(elm).trigger('click');
+            // for good measure delay the click for a bit
+            setTimeout(() => {
+                clicker(elm);
+            }, 500);
         }).catch((e) => {
             l('caught in wait for mutant error');
             l(e);
         });
 
-        waitForPlayer(playerSelect, 'childList', 'iframe', {
-            childList: true,
+        var player = document.querySelector(playerSelect);
+        waitForPlayer(player, 'childList', 'iframe', {
             subtree: true
         }).then((iframeElement) => {
-            $(iframeElement).on("load", function (event) {
-                var jwplayer = document.querySelector(playerSelect);
-                if (jwplayer) {
-                    jwplayer.click()
-                    var promised = jwplayer.requestFullscreen();
-                    promised.then((idk) => {
-                        l('in promise idk')
-                        l(idk);
-                    }).catch((e) => {
-                        l('In error promise idk')
-                        l(e);
 
-                        var promised2 = $(playerSelect)[0].requestFullscreen();
-                        promised2.then((idk2) => {
-                            l('in promise22 idk')
-                            l(idk2);
-                        }).catch((e) => {
-                            l('In error promise22 idk')
-                            l(e);
-                        });
-                    });
+            iframeElement.addEventListener('load', (event) => {
+                if (!document.fullscreenElement) {
+                    requestFullScreen();
                 }
             });
 
             window.history.pushState({}, '', window.location);
-            l('this test')
-
-
-            // waitForJWPlayer(iframeElement.contentWindow.document.body, 'childList', '.jwplayer', {
-            //     childList: true,
-            //     subtree: true
-            // }).then((jwplayer) => {
-
-            // });
-
-
         });
-
-
-
-        // waitForElm(playerSelect).then((elm) => {
-
-        //     l(elm)
-        // });
-
 
     } catch (e) {
         l(e);
     }
-
-
-    // Your code here...
-})();
+}());
