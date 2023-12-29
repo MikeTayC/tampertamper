@@ -1,86 +1,197 @@
-// ==UserScript==
-// @name         Better Binger - Iframe Handler
-// @namespace    http://tampermonkey.net/
-// @version      2023-12-09
-// @description  try to take over the world!
-// @author       You
-// @match        *://*.vidplay.online/*
-// @icon         https://www.google.com/s2/favicons?sz=64&domain=aniwave.to
-// @run-at       document-idle
-// @grant        unsafeWindow
-// ==/UserScript==
-
 'use strict';
 
+// Simple ID so we can easily screen the cross domain talk
 const BETTER_BINGER = 'BETTER_BINGER';
+
+// global jwplayer JS object
+var jw;
 
 function l(e) {
     console.error(e);
 }
 
-function waitForPlayer(player, mutantType, mutantValue, options) {
-    return new Promise(resolve => {
-        if (player) {
-            const observer = new MutationObserver(mutations => {
-                var mutantRecord = mutations.find((mutation) => {
-                    return (mutation.type === mutantType) && (mutation.addedNodes && mutation.addedNodes.length) && (mutation.addedNodes.item(0).tagName === 'IFRAME');
-                });
+function postIt(what, when) {
+    if (typeof what === 'string') {
+        var s = what;
+        what = {
+            str: s
+        };
+    }
 
-                if (mutantRecord) {
-                    observer.disconnect();
-                    resolve(mutantRecord.addedNodes.item(0));
-                }
-            });
-
-            observer.observe(player, options || {
-                childList: true,
-                subtree: true
-            });
-        }
-    });
+    what.id = BETTER_BINGER;
+    window.parent.postMessage(what, when || '*');
 }
 
-(function () {
+const asyncInterval = async (callback, ms, triesLeft = 5) => {
+    return new Promise((resolve, reject) => {
+        const interval = setInterval(async () => {
+            if (await callback()) {
+                resolve();
+                clearInterval(interval);
+            } else if (triesLeft <= 1) {
+                reject();
+                clearInterval(interval);
+            }
+            triesLeft--;
+        }, ms);
+    });
+};
 
-    l('player');
+function initHotKeys(key) {
+    switch (key) {
+        case 'ArrowRight':
+            jw.seek(jw.getPosition() + 5);
+            break;
+        case 'ArrowLeft':
+            jw.seek(jw.getPosition() - 5);
+            break;
+        case 'ArrowUp':
+            jw.setVolume(jw.getVolume() + 10);
+            break;
+        case 'ArrowDown':
+            jw.setVolume(jw.getVolume() - 10);
+            break;
+        case 'v':
+            // TODO make config - Set to default volume (in case it's coming from parent window.)
+            jw?.setVolume(10);
+            break;
+        case 'x':
+            jw.seek(jw.getPosition() + 90);
+            break;
+        case '`':
+            jw.seek(0);
+        case '0':
+            jw.seek(jw.getDuration() - 1);
+            break;
+        case '1':
+        case '2':
+        case '3':
+        case '4':
+        case '5':
+        case '6':
+        case '7':
+        case '8':
+        case '9':
+            jw.seek((key / 10) * jw.getDuration());
+            break;
+        default:
+            // do nothing;
+            break;
+    }
+}
 
+function initFullScreen(trigger) {
+    try {
+        if (trigger) {
+            jw.setFullScreen();
+        }
+    } catch (e) {
+        postIt(e.message);
+    }
+}
 
-    l(window.frameElement);
-    l(window.frames)
+function initIframeListeners() {
+    window.addEventListener('keydown', (ev) => {
+        try {
+            if (ev) {
+                switch (ev.key) {
+                    case '`':
+                        // use ` as hotkey to restart video (in addition to 0 key)
+                        jw.seek(0);
+                        break;
+                    case '0':
+                        jw.seek(jw.getDuration() - 1);
+                        break;
+                    case 'v':
+                        // TODO make config - Set to default volume
+                        jw.setVolume(10);
+                        break;
 
-    l(document.querySelector('iframe'));
+                    case 'x':
+                        jw.seek(jw.getPosition() + 90);
+                        break;
+                    case 'p':
 
-    waitForPlayer(player, 'childList', 'iframe', {
-        childList: true,
-        subtree: true
-    }).then((iframeElement) => {
+                        postIt({
+                            key: 'position',
+                            v: jw.getPosition()
+                        });
 
-        iframeElement.addEventListener('load', (event) => {
-            l('from framer in ventlistner for iframe lement load')
-            l(event)
-        });
+                        postIt({
+                            key: 'getDuration',
+                            v: jw.getDuration()
+                        });
+                        postIt({
+                            key: 'getAbsolutePosition',
+                            v: jw.getAbsolutePosition()
+                        });
+
+                        break;
+
+                    default:
+                        // do nothing
+
+                        break;
+                }
+
+                postIt({
+                    key: ev.key
+                }, '*');
+            }
+        } catch (e) {
+            l(e);
+        }
     });
 
+    window.addEventListener('message', (event) => {
+        if (event?.data?.id === BETTER_BINGER && jw) {
+            event.data.msg = 'MESSAGE TO IFRAME FROM';
+            postIt(event.data);
+            initHotKeys(event.data.key);
+            initFullScreen(event.data.fullscreen);
+        }
+    }, false);
+}
 
-    if (window && window.parent) {
-        window.addEventListener('keydown', (ev) => {
-            try {
-                if (ev) {
-                    switch (ev.key) {
-                        default:
-                            // do nothing
-                            window.parent.postMessage({
-                                id: BETTER_BINGER,
-                                key: ev.key
-                            }, '*');
-                            break;
-                    }
-                }
-            } catch (e) {
-                console.error(e);
-            }
+function jwplayerWrapper(callback) {
+    asyncInterval(() => {
+        if (unsafeWindow?.jwplayer) {
+            // Set the global wrapper
+            jw = unsafeWindow.jwplayer();
+            callback();
+            return true;
+        }
+        return false;
+    }, 1000);
+}
+
+
+/**
+ * Auto Set the quality control to highest possible(index 0: auto, 1: highest);
+ */
+function autoSetQuality() {
+    // TODO MAKE CONFIG WRAPPER
+    if (jw?.getCurrentQuality() !== 1) {
+        jw.setCurrentQuality(1);
+    }
+}
+
+
+(function () {
+    // This is meaant to trigger on iframes playing video with JWPlayer
+    if (window.self !== window.top) {
+        initIframeListeners();
+
+        // async interval wrapper that waits for unsafeWindow.jwplayer to exists then executes the callback
+        jwplayerWrapper(() => {
+            initHotKeys();
+
+            autoSetQuality();
+
+            // postIt({
+            //     v: 'getCaptionsList',
+            //     getCaptionsList: jw.getCaptionsList()
+            // });
         });
-
-
     }
 }());

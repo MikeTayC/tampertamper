@@ -10,7 +10,8 @@
     },
     "globals": {
         "jQuery": true,
-        "$": true
+        "$": true,
+        "unsafeWindow": true
     },
     "rules": {
         "import/no-unresolved": "off",
@@ -26,6 +27,9 @@
         "no-useless-constructor": "error",
         "no-useless-rename": "error",
         "no-multi-assign": "off",
+        "no-param-reassign": "off",
+        "no-plusplus": "off",
+        "no-fallthrough": "off",
         "accessor-pairs": "error",
         "rest-spread-spacing": "error",
         "no-tabs": "error",

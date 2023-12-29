@@ -1,32 +1,42 @@
-// ==UserScript==
-// @name         Better Binger - Main
-// @namespace    http://tampermonkey.net/
-// @version      2023-12-09
-// @description  try to take over the world!
-// @author       You
-// @match        *://*.aniwave.to/*
-// @match        *://*.aniwave.bz/*
-// @match        *://*.aniwave.ws/*
-// @match        *://*.aniwave.vc/*
-// @icon         https://www.google.com/s2/favicons?sz=64&domain=aniwave.to
-// @run-at       document-idle
-// @grant        unsafeWindow
-// ==/UserScript==
-
 'use strict';
 
 const playerSelect = '#player';
-const jwplayerSelect = '.jw-player';
 const playButtonSelect = '.play';
 const backSelect = 'div.ctrl.forward.prev';
 const nextSelect = 'div.ctrl.forward.next';
 
 const BETTER_BINGER = 'BETTER_BINGER';
 
+var iframeWindow;
 
 function l(e) {
+    // using error so it's easier to filter console logs
     console.error(e);
 }
+
+function clicker(el, options) {
+    if (el) {
+        var event = new MouseEvent('click', options || {});
+        el.dispatchEvent(event);
+    } else {
+        l('no el to click');
+    }
+}
+
+function postToJW(what, when) {
+    if (iframeWindow) {
+        if (typeof what === 'string') {
+            var s = what;
+            what = {
+                str: s
+            }
+        }
+
+        what.id = BETTER_BINGER;
+        iframeWindow.postMessage(what, when || '*');
+    }
+}
+
 
 function waitForElementByMutant(selector, mutantType, mutantValue, options) {
     return new Promise(resolve => {
@@ -47,7 +57,28 @@ function waitForElementByMutant(selector, mutantType, mutantValue, options) {
     });
 }
 
-function waitForPlayer(player, mutantType, mutantValue, options) {
+function waitForPlayButton() {
+    try {
+        waitForElementByMutant(playButtonSelect, 'attributes', 'opacity: 1;', {
+            attributes: true,
+            attributeFilter: ['style'],
+            attributeOldValue: true
+        }).then(() => {
+            // for good measure delay the click for a bit
+            setTimeout(() => {
+                // query for the selector again in case the default auto play worked
+                clicker(document.querySelector(playButtonSelect));
+            }, 500);
+        }).catch((e) => {
+            l('caught in wait for mutant error');
+            l(e);
+        });
+    } catch (e) {
+        l(e);
+    }
+}
+
+function promisePlayer(player, mutantType, mutantValue, options) {
     return new Promise(resolve => {
         if (player) {
             const observer = new MutationObserver(mutations => {
@@ -69,56 +100,55 @@ function waitForPlayer(player, mutantType, mutantValue, options) {
     });
 }
 
-
-function clicker(el, options) {
-    if (el) {
-        var event = new MouseEvent('click', options || {});
-        l(el.dispatchEvent(event));
-    } else {
-        l('no el to click')
-    }
-}
-
 function requestFullScreen() {
-    var jwplayer = document.querySelector(playerSelect);
-    if (jwplayer) {
-        jwplayer.requestFullscreen().catch((e) => {
-            l('In error promise idk');
-            l(e);
-            l('doc fullscreenelement3');
-            l(document.fullscreenElement);
-
-            setTimeout(() => {
-                l('trying jwplayer.click');
-                clicker(jwplayer);
-
-                var promised2 = jwplayer.requestFullscreen();
-                promised2.then((idk2) => {
-                    l('in promise22 idk');
-                    l(idk2);
-                    l('doc fullscreenelement4');
-                    l(document.fullscreenElement);
-                }).catch((e) => {
-                    l('In error promise22 idk');
-                    l(e);
-                });
-            }, 3000);
-        });
+    var player = document.querySelector(playerSelect);
+    if (player) {
+        player.requestFullscreen().catch(
+            () => postToJW({
+                fullscreen: true
+            })
+        );
     }
 }
 
-function recordKeyPress(ev) {
+function hotKeyPress(ev) {
     try {
         if (ev && ev.target && ev.target.tagName !== 'INPUT') {
             switch (ev.key) {
                 case 'f':
+                    // exit/enter fullscreen even if the target isn't not in iframe player
                     if (ev.target.id !== 'player') {
                         if (!document.fullscreenElement) {
                             requestFullScreen();
                         } else {
                             document.exitFullscreen();
                         }
+                    } else {
+                        l(ev.target.id);
                     }
+                    break;
+
+                case 'v':
+                case 'x':
+                case 'ArrowRight':
+                case 'ArrowLeft':
+                case 'ArrowUp':
+                case 'ArrowDown':
+                case '`':
+                case '1':
+                case '2':
+                case '3':
+                case '4':
+                case '5':
+                case '6':
+                case '7':
+                case '8':
+                case '9':
+                case '0':
+                    // send these to jwplayer iframe so the hotkeys still work
+                    postToJW({
+                        key: ev.key
+                    });
                     break;
                 default:
                     // do nothing
@@ -130,83 +160,93 @@ function recordKeyPress(ev) {
     }
 }
 
-function playerHotKeyOverwrite(ev) {
+function initBetterListeners() {
     try {
-        // if (ev && ev.target && ev.target.tagName !== 'INPUT') {
-        if (ev) {
-            l(ev.key);
-            l(ev);
-            l(ev.target)
-            l(ev.target.id)
-
-            // switch (ev.key) {
-            //     case 'b':
-            //         if (ev.target.id === 'player') {
-            //             l('clicked b in player');
-
-            //             clicker(document.querySelector(backSelect));
-            //         }
-            //         break;
-            //     case 'n':
-            //         if (ev.target.id === 'player') {
-            //             l('clicked n in player')
-            //             clicker(document.querySelector(nextSelect));
-            //         }
-            //         break;
-            //     default:
-            //         // do nothing
-            //         break;
-            // }
-        } else {
-            l('no ev for hotkey overwrite')
-        }
+        window.addEventListener('keydown', hotKeyPress);
+        window.addEventListener('message', (event) => {
+            if (event?.data?.id === BETTER_BINGER) {
+                l(JSON.stringify(event.data));
+                switch (event.data.key) {
+                    case 'n':
+                        clicker(document.querySelector(nextSelect));
+                        break;
+                    case 'b':
+                        clicker(document.querySelector(backSelect));
+                        break;
+                    default:
+                        // do nothing;
+                        break;
+                }
+            }
+        }, false);
     } catch (e) {
         l(e);
     }
 }
 
-(function () {
-    l('testering');
+function waitForPlayer() {
     try {
-        window.addEventListener('keydown', recordKeyPress);
-
-        window.addEventListener('message', (event) => {
-
-            if (event?.data?.id === BETTER_BINGER) {
-                l('message event listened');
-                l(event);
-                l(event.data);
-            }
-        }, false);
-
-        waitForElementByMutant(playButtonSelect, 'attributes', 'opacity: 1;', {
-            attributes: true,
-            attributeFilter: ['style'],
-            attributeOldValue: true
-        }).then((elm) => {
-            // for good measure delay the click for a bit
-            setTimeout(() => {
-                clicker(elm);
-            }, 500);
-        }).catch((e) => {
-            l('caught in wait for mutant error');
-            l(e);
-        });
-
         var player = document.querySelector(playerSelect);
-        waitForPlayer(player, 'childList', 'iframe', {
+        promisePlayer(player, 'childList', 'iframe', {
+            childList: true,
             subtree: true
         }).then((iframeElement) => {
-
-            iframeElement.addEventListener('load', (event) => {
+            iframeElement.addEventListener('load', () => {
                 if (!document.fullscreenElement) {
                     requestFullScreen();
                 }
+
+                iframeWindow = iframeElement.contentWindow;
             });
 
+            // Save the page history (useful for when dev tools redirection happens)
             window.history.pushState({}, '', window.location);
         });
+    } catch (e) {
+        l(e);
+    }
+}
 
+function watchForAjax() {
+    const originalXMLHttpRequest = XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open = function (type, url) {
+        try {
+            // do URL matching here if needed
+            if (url.indexOf('ajax/server/list') !== -1) {
+                this.addEventListener('load', function () {
+                    // match some JSON values on responseText
+                    switch (this.status) {
+                        case 200:
+                            waitForPlayer();
+                            break;
+                        case 403:
+                            window.location.reload();
+                            break;
+                        default:
+                            // do nothing
+                            break;
+                    }
+                });
+            }
+        } catch (e) {
+            l(e);
+        }
+
+        originalXMLHttpRequest.apply(this, arguments);
+    };
+}
+
+(function () {
+    l('Better Binger - Main');
+    try {
+        // needs to be set early at start of document 
+        initBetterListeners();
+        watchForAjax();
+        // needs to be run after document/window load
+        window.addEventListener('load', () => {
+            waitForPlayButton();
+            waitForPlayer();
+        });
     } catch (e) {
         l(e);
     }
