@@ -1,5 +1,8 @@
 'use strict';
 
+// TODO on catalog search use 'j' to autofilter japan
+// TODO autonext into the next the season
+
 // Simple ID so we can easily screen the cross domain talk
 const BETTER_BINGER = 'BETTER_BINGER';
 
@@ -38,14 +41,18 @@ const asyncInterval = async (callback, ms, triesLeft = 5) => {
 };
 
 function initHotKeys(key) {
+    // jwplayer must be initialized for these to work
+    if (!jw) return;
     switch (key) {
         case 'ArrowRight':
+            // Right/Left arrows to skip time even if the active element isn't on the player/iframe
             jw.seek(jw.getPosition() + 5);
             break;
         case 'ArrowLeft':
             jw.seek(jw.getPosition() - 5);
             break;
         case 'ArrowUp':
+            // TODO figure out best way to stop scroll while volume changes
             jw.setVolume(jw.getVolume() + 10);
             break;
         case 'ArrowDown':
@@ -53,14 +60,16 @@ function initHotKeys(key) {
             break;
         case 'v':
             // TODO make config - Set to default volume (in case it's coming from parent window.)
-            jw?.setVolume(10);
+            jw.setVolume(10);
             break;
         case 'x':
+            // bigger skip (useful when intro/outro autoskip fail)
             jw.seek(jw.getPosition() + 90);
             break;
         case '`':
             jw.seek(0);
         case '0':
+            // Overwrites the default hotkey to skip to the end of the video (using key "`" to get to start of video instead)
             jw.seek(jw.getDuration() - 1);
             break;
         case '1':
@@ -72,6 +81,7 @@ function initHotKeys(key) {
         case '7':
         case '8':
         case '9':
+            // fallthrough - Transfering hotkeys 1 to 9 so they still work when active element is not on player/iframe
             jw.seek((key / 10) * jw.getDuration());
             break;
         default:
@@ -80,10 +90,45 @@ function initHotKeys(key) {
     }
 }
 
-function initFullScreen(trigger) {
+/**
+ * This will function as the final fallback in case all other attmepts to get to full screen fail.
+ * 
+ * the Element.requestFullscreen() can be unreliable due to permissions anc cross-origina scripting 
+ * prevention. It seems to be intermittent, so if the auto full screen still fails, then simply try
+ * refreshing the page.
+ */
+function initFullScreen() {
     try {
-        if (trigger) {
-            jw.setFullScreen();
+        var player = document.querySelector('#player');
+        if (player) {
+            player.requestFullscreen()
+                .then((e) => {
+                    postIt('SUCCESS REQUEST FULLSCREEN FROM IFRAME');
+
+                    postIt({
+                        fullscreenEnabled: document.fullscreenEnabled,
+                        fullscreenElement: document.fullscreenElement,
+                        webkitFullscreenElement: document.webkitFullscreenElement,
+                        mozFullScreenElement: document.mozFullScreenElement,
+                        msFullscreenElement: document.msFullscreenElement,
+                        jwgetFullscreen: jw?.getFullscreen(),
+                        setFullscreen: jw?.setFullscreen
+                    });
+                })
+                .catch((e) => {
+
+
+                    postIt(`trying request full screen from iframe: ${e.message}`);
+                    postIt({
+                        fullscreenEnabled: document.fullscreenEnabled,
+                        fullscreenElement: document.fullscreenElement,
+                        webkitFullscreenElement: document.webkitFullscreenElement,
+                        mozFullScreenElement: document.mozFullScreenElement,
+                        msFullscreenElement: document.msFullscreenElement,
+                        jwgetFullscreen: jw?.getFullscreen(),
+                        setFullscreen: jw?.requestFullscreen
+                    });
+                });
         }
     } catch (e) {
         postIt(e.message);
@@ -94,6 +139,12 @@ function initIframeListeners() {
     window.addEventListener('keydown', (ev) => {
         try {
             if (ev) {
+                // important - returns keydown scope to parent
+                postIt({
+                    key: ev.key
+                }, '*');
+
+                // Hotkey overwrites
                 switch (ev.key) {
                     case '`':
                         // use ` as hotkey to restart video (in addition to 0 key)
@@ -133,10 +184,6 @@ function initIframeListeners() {
 
                         break;
                 }
-
-                postIt({
-                    key: ev.key
-                }, '*');
             }
         } catch (e) {
             l(e);
@@ -144,11 +191,17 @@ function initIframeListeners() {
     });
 
     window.addEventListener('message', (event) => {
-        if (event?.data?.id === BETTER_BINGER && jw) {
-            event.data.msg = 'MESSAGE TO IFRAME FROM';
+        if (event?.data?.id === BETTER_BINGER) {
+            event.data.msg = 'MESSAGE TO IFRAME FROM PARENT';
             postIt(event.data);
+
+            // posting the hotkeys presses that occur when the active element isn't on the video player/iframe
             initHotKeys(event.data.key);
-            initFullScreen(event.data.fullscreen);
+
+            // if data.fullscreen is true, then the requestFullscreen() on the parent window failed, we'll try in the iframe scope as well.
+            if (event.data.fullscreen) {
+                initFullScreen();
+            }
         }
     }, false);
 }
@@ -156,7 +209,7 @@ function initIframeListeners() {
 function jwplayerWrapper(callback) {
     asyncInterval(() => {
         if (unsafeWindow?.jwplayer) {
-            // Set the global wrapper
+            // Set the global jw player
             jw = unsafeWindow.jwplayer();
             callback();
             return true;
@@ -164,7 +217,6 @@ function jwplayerWrapper(callback) {
         return false;
     }, 1000);
 }
-
 
 /**
  * Auto Set the quality control to highest possible(index 0: auto, 1: highest);
@@ -176,22 +228,29 @@ function autoSetQuality() {
     }
 }
 
+function jwListens() {
+    jw?.on('fullscreen', () => {
+        // minor bugfix - cursor doesn't disappear on fullscreen change under certain conditions
+        document.body.style.cursor = 'none';
+    });
+}
 
 (function () {
     // This is meaant to trigger on iframes playing video with JWPlayer
     if (window.self !== window.top) {
+        // listners to be defined first and have no dependancies 
         initIframeListeners();
 
         // async interval wrapper that waits for unsafeWindow.jwplayer to exists then executes the callback
         jwplayerWrapper(() => {
+            jwListens();
             initHotKeys();
-
             autoSetQuality();
+            initFullScreen();
 
-            // postIt({
-            //     v: 'getCaptionsList',
-            //     getCaptionsList: jw.getCaptionsList()
-            // });
+            postIt({
+                key: 'returnScope'
+            });
         });
     }
 }());

@@ -68,7 +68,7 @@ function waitForPlayButton() {
             setTimeout(() => {
                 // query for the selector again in case the default auto play worked
                 clicker(document.querySelector(playButtonSelect));
-            }, 500);
+            }, 1000);
         }).catch((e) => {
             l('caught in wait for mutant error');
             l(e);
@@ -103,16 +103,26 @@ function promisePlayer(player, mutantType, mutantValue, options) {
 function requestFullScreen() {
     var player = document.querySelector(playerSelect);
     if (player) {
+        clicker(player);
         player.requestFullscreen().catch(
             () => postToJW({
                 fullscreen: true
             })
         );
+
+        l(JSON.stringify({
+            fullscreenEnabled: document.fullscreenEnabled,
+            fullscreenElement: document.fullscreenElement,
+            webkitFullscreenElement: document.webkitFullscreenElement,
+            mozFullScreenElement: document.mozFullScreenElement,
+            msFullscreenElement: document.msFullscreenElement
+        }));
     }
 }
 
 function hotKeyPress(ev) {
     try {
+        // Don't rewrite hotkeys or send to iframe if the active element is an input
         if (ev && ev.target && ev.target.tagName !== 'INPUT') {
             switch (ev.key) {
                 case 'f':
@@ -165,6 +175,7 @@ function initBetterListeners() {
         window.addEventListener('keydown', hotKeyPress);
         window.addEventListener('message', (event) => {
             if (event?.data?.id === BETTER_BINGER) {
+                event.data.where = 'MESSAGE FROM IFRAME';
                 l(JSON.stringify(event.data));
                 switch (event.data.key) {
                     case 'n':
@@ -172,6 +183,10 @@ function initBetterListeners() {
                         break;
                     case 'b':
                         clicker(document.querySelector(backSelect));
+                        break;
+
+                    case 'returnScope':
+                        clicker(document.querySelector(playerSelect));
                         break;
                     default:
                         // do nothing;
@@ -195,8 +210,9 @@ function waitForPlayer() {
                 if (!document.fullscreenElement) {
                     requestFullScreen();
                 }
-
                 iframeWindow = iframeElement.contentWindow;
+
+                clicker(iframeElement);
             });
 
             // Save the page history (useful for when dev tools redirection happens)
@@ -217,7 +233,9 @@ function watchForAjax() {
                     // match some JSON values on responseText
                     switch (this.status) {
                         case 200:
-                            waitForPlayer();
+                            if (!document.fullscreenElement) {
+                                waitForPlayer();
+                            }
                             break;
                         case 403:
                             window.location.reload();
@@ -241,11 +259,12 @@ function watchForAjax() {
     try {
         // needs to be set early at start of document 
         initBetterListeners();
-        watchForAjax();
         // needs to be run after document/window load
         window.addEventListener('load', () => {
             waitForPlayButton();
+            l('main window with love');
             waitForPlayer();
+            watchForAjax();
         });
     } catch (e) {
         l(e);
