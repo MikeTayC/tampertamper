@@ -23,6 +23,7 @@
         "one-var": "off",
         "radix": "off",
         "no-useless-computed-key": "error",
+        "one-var-declaration-per-line": "off",
         "no-prototype-builtins": "off",
         "no-useless-constructor": "error",
         "no-useless-rename": "error",
@@ -44,6 +45,7 @@
         "no-continue": "off",
         "no-undef": "error",
         "no-console": "off",
-        "eol-last": "off"
+        "eol-last": "off",
+        "quotes": "off"
     }
 }
